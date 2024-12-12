@@ -1,0 +1,72 @@
+name: kubstu-music-hosting
+
+volumes:
+  static_volume:
+  media_volume:
+  db_volume:
+
+networks:
+  local:
+
+secrets:
+  django_secret_key:
+    file: secrets/django_secret_key
+    name: django_secret_key
+  db_password:
+    file: secrets/db_password
+    name: db_password
+  db_url:
+    file: secrets/db_url
+    name: db_url
+
+services:
+  backend:
+    build: ../kubstu.music-hosting.back/
+    container_name: kubstu.music-hosting.back
+    restart: no
+    ports:
+      - "8000:8000"
+    environment:
+      DB_URL_FILE: /run/secrets/db_url
+      SECRET_KEY_FILE: /run/secrets/django_secret_key
+    env_file: .env
+    command: >
+      sh -c "python src/manage.py migrate && python src/manage.py runserver 0.0.0.0:8000"
+    depends_on:
+      - database
+    volumes:
+      - static_volume:/usr/src/app/static
+      - media_volume:/usr/src/app/media
+    networks:
+      - local
+    secrets:
+      - db_url
+      - django_secret_key
+
+  database:
+    image: postgres:14.11
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - db_volume:/var/lib/postgresql/data/
+    networks:
+      - local
+    secrets:
+      - db_password
+
+  frontend:
+    build: ../kubstu.music-hosting.front/
+    container_name: kubstu.music-hosting.front
+    restart: no
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    command: npm run start
+    depends_on:
+      - backend
+    networks:
+      - local
